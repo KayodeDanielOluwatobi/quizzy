@@ -1,0 +1,52 @@
+@import "tailwindcss";
+@plugin "tailwindcss-animate";
+@variant hover (&:hover);/* Force hover on touch devices (Keep your existing fix) */
+
+@theme {
+  /* Connect Tailwind names to our CSS variables */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-border: var(--border);
+}
+
+
+/* === THEME VARIABLES === */
+:root {
+  /* LIGHT MODE (Clean, Notion-like) */
+  --background: #ffffff;
+  --foreground: #09090b; /* Zinc-950 (Not pure black, softer) */
+  
+  --card: #f4f4f5; /* Zinc-100 */
+  --card-foreground: #09090b;
+
+  --primary: #16a34a; /* Green-600 (Your brand color) */
+  --primary-foreground: #ffffff;
+
+  --border: #e4e4e7; /* Zinc-200 */
+}
+
+.dark {
+  /* DARK MODE (Premium, Arc-like) */
+  --background: #0f0f12; /* Your chosen deep dark background */
+  --foreground: #fafafa; /* Zinc-50 */
+
+  --card: #18181b; /* Zinc-900 */
+  --card-foreground: #fafafa;
+
+  --primary: #4ade80; /* Green-400 (Brighter green for dark backgrounds) */
+  --primary-foreground: #052e16;
+
+  --border: #27272a; /* Zinc-800 */
+}
+
+/* Default base styles */
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  /* Smooth color transition when toggling */
+  transition: background-color 0.3s ease, color 0.3s ease;
+}

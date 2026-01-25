@@ -1,0 +1,417 @@
+'use client';
+
+import { useState, useEffect, Suspense, useMemo } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
+import { useTheme } from "next-themes";
+import { supabase } from "@/lib/supabase"; 
+import { Sun, Moon, Clock, User, ChevronRight, ChevronLeft, CheckCircle2, XCircle, BrainCircuit, Loader2, Timer } from "lucide-react";
+
+interface AIResponse {
+  explanation: string;
+  technicalDetails?: string;
+  errorCode?: string;
+}
+
+// ⚠️ MASTER EXAM SETTINGS ⚠️
+const EXAM_DURATION_MINUTES = 60; 
+const TOTAL_EXAM_QUESTIONS = 60; 
+
+function QuizContent() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const { theme, setTheme } = useTheme();
+
+  const name = searchParams.get("name") || "Comrade";
+  const mode = searchParams.get("mode") || "exam"; 
+
+  // --- 1. SUPABASE STATE ---
+  const [sectionsData, setSectionsData] = useState<any[]>([]);
+  const [isFetchingDB, setIsFetchingDB] = useState(true);
+
+  // --- 2. QUIZ STATE & MEMORY ---
+  const [currentSectionIndex, setCurrentSectionIndex] = useState(0); 
+  const [currentQ, setCurrentQ] = useState(0); 
+  const [userAnswers, setUserAnswers] = useState<Record<number, string>>({}); 
+
+  // --- 3. AI TUTOR STATE ---
+  const [hasChecked, setHasChecked] = useState(false);
+  const [aiResponse, setAiResponse] = useState<AIResponse | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+
+  // --- 4. TIMER STATE ---
+  const TOTAL_SECONDS = EXAM_DURATION_MINUTES * 60;
+  const [timeLeft, setTimeLeft] = useState<number | null>(null);
+
+  // --- AUTOSAVE SYSTEM ---
+  useEffect(() => {
+    if (mode === "exam" && typeof window !== "undefined") {
+      const savedTime = localStorage.getItem("boggle_timeLeft");
+      const savedAnswers = localStorage.getItem("boggle_userAnswers");
+      const savedSection = localStorage.getItem("boggle_currentSection");
+      const savedQ = localStorage.getItem("boggle_currentQ");
+
+      if (savedTime) setTimeLeft(parseInt(savedTime, 10));
+      if (savedAnswers) setUserAnswers(JSON.parse(savedAnswers));
+      if (savedSection) setCurrentSectionIndex(parseInt(savedSection, 10));
+      if (savedQ) setCurrentQ(parseInt(savedQ, 10));
+    }
+  }, [mode]);
+
+  useEffect(() => {
+    if (mode === "exam" && typeof window !== "undefined") {
+      localStorage.setItem("boggle_userAnswers", JSON.stringify(userAnswers));
+      localStorage.setItem("boggle_currentSection", currentSectionIndex.toString());
+      localStorage.setItem("boggle_currentQ", currentQ.toString());
+    }
+  }, [userAnswers, currentSectionIndex, currentQ, mode]);
+
+  useEffect(() => {
+    if (mode === "exam" && timeLeft !== null && typeof window !== "undefined") {
+      localStorage.setItem("boggle_timeLeft", timeLeft.toString());
+    }
+  }, [timeLeft, mode]);
+
+  // --- FETCH ALL SECTIONS ---
+  useEffect(() => {
+    const fetchQuiz = async () => {
+      const { data, error } = await supabase
+        .from('course_sections')
+        .select('*')
+        .eq('course_code', 'ANA 205')
+        .order('id', { ascending: true });
+
+      if (error) console.error("DB Error:", error);
+
+      if (data && data.length > 0) {
+        if (mode === "exam") {
+          const limitPerSection = Math.ceil(TOTAL_EXAM_QUESTIONS / data.length);
+          const randomizedExamData = data.map(section => {
+            const shuffledQuestions = [...section.questions].sort(() => 0.5 - Math.random());
+            return { ...section, questions: shuffledQuestions.slice(0, limitPerSection) };
+          });
+          setSectionsData(randomizedExamData);
+          localStorage.setItem("boggle_examData", JSON.stringify(randomizedExamData));
+        } else {
+          setSectionsData(data);
+        }
+      }
+      setIsFetchingDB(false);
+    };
+    fetchQuiz();
+  }, [mode]);
+
+  // --- DERIVED METRICS ---
+  const totalQuestions = useMemo(() => sectionsData.reduce((acc, sec) => acc + sec.questions.length, 0), [sectionsData]);
+  
+  const absoluteQuestionIndex = useMemo(() => {
+    if (sectionsData.length === 0) return 0;
+    let count = 0;
+    for (let i = 0; i < currentSectionIndex; i++) {
+      count += sectionsData[i].questions.length;
+    }
+    return count + currentQ + 1;
+  }, [sectionsData, currentSectionIndex, currentQ]);
+
+  const selectedOption = userAnswers[absoluteQuestionIndex - 1] || null;
+
+  // --- SMART TIMER LOGIC ---
+  useEffect(() => {
+    if (sectionsData.length > 0 && mode === "exam" && timeLeft === null) {
+      setTimeLeft(TOTAL_SECONDS); 
+    }
+  }, [sectionsData, mode, TOTAL_SECONDS, timeLeft]);
+
+  useEffect(() => {
+    if (timeLeft === null || timeLeft <= 0) return;
+    const timer = setInterval(() => setTimeLeft((prev) => (prev ? prev - 1 : 0)), 1000);
+    return () => clearInterval(timer);
+  }, [timeLeft]);
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins < 10 ? "0" : ""}${mins}:${secs < 10 ? "0" : ""}${secs}`;
+  };
+
+  const getTimerStyles = () => {
+    if (timeLeft === null) return 'bg-muted text-foreground';
+    const percentage = timeLeft / TOTAL_SECONDS;
+    if (percentage > 0.5) return 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20'; 
+    if (percentage > 0.15) return 'bg-amber-500/10 text-amber-600 border-amber-500/20'; 
+    return 'bg-red-500 text-white border-red-600 animate-pulse'; 
+  };
+
+  const activeSection = sectionsData.length > 0 ? sectionsData[currentSectionIndex] : null;
+  const question = activeSection ? activeSection.questions[currentQ] : null;
+
+  // --- HANDLE OPTION CLICK ---
+  const handleOptionSelect = (option: string) => {
+    if (hasChecked && mode === "tutor") return; 
+    setUserAnswers(prev => ({ ...prev, [absoluteQuestionIndex - 1]: option }));
+  };
+
+  // --- NAVIGATION CONTROLS ---
+  const handleNext = () => {
+    if (!activeSection) return;
+    setHasChecked(false); 
+    setAiResponse(null);
+
+    if (currentQ < activeSection.questions.length - 1) {
+      setCurrentQ(prev => prev + 1);
+    } else if (currentSectionIndex < sectionsData.length - 1) {
+      setCurrentSectionIndex(prev => prev + 1);
+      setCurrentQ(0);
+    } 
+  };
+
+  const handlePrevious = () => {
+    setHasChecked(false);
+    setAiResponse(null);
+
+    if (currentQ > 0) {
+      setCurrentQ(prev => prev - 1);
+    } else if (currentSectionIndex > 0) {
+      setCurrentSectionIndex(prev => prev - 1);
+      setCurrentQ(sectionsData[currentSectionIndex - 1].questions.length - 1);
+    }
+  };
+
+  const jumpToQuestion = (targetAbsoluteIndex: number) => {
+    setHasChecked(false); 
+    setAiResponse(null);
+
+    let count = 0;
+    for (let s = 0; s < sectionsData.length; s++) {
+      const sectionLength = sectionsData[s].questions.length;
+      if (targetAbsoluteIndex < count + sectionLength) {
+        setCurrentSectionIndex(s);
+        setCurrentQ(targetAbsoluteIndex - count);
+        return;
+      }
+      count += sectionLength;
+    }
+  };
+
+  const jumpToSection = (index: number) => {
+    setHasChecked(false); 
+    setAiResponse(null);
+
+    setCurrentSectionIndex(index);
+    setCurrentQ(0); 
+  };
+
+  const handleFinish = () => {
+    let finalScore = 0;
+    let questionCounter = 0;
+    sectionsData.forEach(section => {
+      section.questions.forEach((q: any) => {
+        if (userAnswers[questionCounter] === q.correct) finalScore += 1;
+        questionCounter++;
+      });
+    });
+
+    // DO NOT WIPE MEMORY HERE! The Results Page needs to read it first.
+    // We only wipe the timer so the exam locks.
+    localStorage.removeItem("boggle_timeLeft");
+
+    router.push(`/results?name=${encodeURIComponent(name)}&mode=${mode}&score=${finalScore}&total=${totalQuestions}`);
+  };
+
+  // --- AI LOGIC ---
+  const checkAnswer = async () => {
+    if (!selectedOption || !question) return;
+    setIsLoading(true);
+    setHasChecked(true);
+
+    try {
+      const res = await fetch("/api/gemini", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, question: question.question, selectedOption, correctAnswer: question.correct, isCorrect: selectedOption === question.correct }),
+      });
+      const data = await res.json();
+      setAiResponse({ explanation: data.explanation });
+    } catch (error) {
+      setAiResponse({ explanation: "Oops! Network error." });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  if (isFetchingDB) return <main className="flex min-h-screen items-center justify-center bg-background"><Loader2 size={40} className="animate-spin text-primary" /></main>;
+  if (!activeSection || !question) return <main className="flex min-h-screen items-center justify-center">No questions found.</main>;
+
+  return (
+    <main className="flex min-h-screen flex-col items-center bg-background text-foreground transition-colors duration-300 p-4 md:p-6 font-sans">
+      
+      {mode === "exam" && timeLeft !== null && (
+        <div className={`w-full max-w-3xl mb-4 px-6 py-4 rounded-xl border flex items-center justify-between transition-colors duration-500 ${getTimerStyles()}`}>
+          <div className="flex items-center gap-3">
+            <Timer size={24} strokeWidth={2.5} />
+            <span className="font-black text-sm uppercase tracking-widest">Time Remaining</span>
+          </div>
+          <span className="font-mono text-3xl font-black tabular-nums tracking-wider leading-none">{formatTime(timeLeft)}</span>
+        </div>
+      )}
+
+      <header className="w-full max-w-3xl mb-6 flex items-center justify-between pb-4 border-b border-border">
+        <div className="flex items-center gap-3">
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary text-primary-foreground">
+            <BrainCircuit size={24} strokeWidth={2.5} />
+          </div>
+          <div>
+            <h1 className="text-sm font-bold text-muted-foreground uppercase">{activeSection.course_code}</h1>
+            <p className="text-lg md:text-xl font-extrabold leading-none text-foreground mt-0.5">Gross Anatomy of Lower Limbs</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          <span className={`px-3 py-1 text-xs font-black tracking-wider uppercase rounded-md ${mode === 'tutor' ? 'bg-blue-500/10 text-blue-600' : 'bg-red-500/10 text-red-600'}`}>
+            {mode === 'tutor' ? 'Tutor' : 'Exam'}
+          </span>
+          <button onClick={() => setTheme(theme === "dark" ? "light" : "dark")} className="p-2 rounded-md bg-muted text-foreground hover:bg-muted/80 transition-colors">
+            {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
+          </button>
+        </div>
+      </header>
+
+      <div className="w-full max-w-3xl mb-8 overflow-x-auto no-scrollbar pb-1">
+        <div className="flex gap-2 min-w-max">
+          {sectionsData.map((section, index) => (
+            <button 
+              key={section.id} 
+              onClick={() => jumpToSection(index)}
+              className={`px-4 py-2 rounded-md text-sm font-bold transition-all flex items-center gap-2 border cursor-pointer hover:bg-muted
+                ${index === currentSectionIndex ? "bg-primary text-primary-foreground border-primary" : index < currentSectionIndex ? "bg-green-500/10 text-green-600 border-green-500/20" : "bg-card text-muted-foreground border-border"}`}
+            >
+              {index < currentSectionIndex && <CheckCircle2 size={14} />} {section.section_title}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="w-full max-w-3xl flex-1 flex flex-col justify-start">
+        <h2 className="text-lg md:text-2xl font-bold mb-6 text-foreground leading-relaxed text-left">
+          <span className="text-primary mr-2">{absoluteQuestionIndex}.</span> 
+          {question.question}
+        </h2>
+        
+        <div className="grid grid-cols-1 gap-3">
+          {question.options.map((option: string) => (
+            <button 
+              key={option} 
+              onClick={() => handleOptionSelect(option)} 
+              disabled={hasChecked} 
+              className={`p-4 rounded-lg border text-left font-medium text-base transition-all flex justify-between items-center 
+                ${!hasChecked 
+                  ? (selectedOption === option ? "border-primary bg-primary/5 text-primary ring-1 ring-primary" : "border-border bg-card hover:bg-muted text-foreground") 
+                  : (option === question.correct ? "border-green-500 bg-green-500/10 text-green-600" : selectedOption === option ? "border-red-500 bg-red-500/10 text-red-600" : "border-border bg-card text-muted-foreground opacity-50 cursor-not-allowed")}`}
+            >
+              <span>{option}</span>
+            </button>
+          ))}
+        </div>
+
+        {/* --- CHECK BUTTON (TUTOR MODE) --- */}
+        {mode === "tutor" && !hasChecked && (
+          <button 
+            onClick={checkAnswer} 
+            disabled={!selectedOption} 
+            className={`mt-6 w-full py-4 rounded-lg font-bold flex items-center justify-center gap-2 transition-all 
+              ${selectedOption ? "bg-primary text-primary-foreground hover:bg-primary/90" : "bg-muted text-muted-foreground cursor-not-allowed border border-border"}`}
+          >
+            Check Answer
+          </button>
+        )}
+
+        {/* --- AI TUTOR OUTPUT --- */}
+        {mode === "tutor" && hasChecked && (
+          <div className="mt-6 p-5 rounded-lg border border-border bg-muted/30">
+            <div className="flex items-center gap-2 mb-3 text-primary font-bold"><BrainCircuit size={20} /> AI Verdict:</div>
+            {isLoading ? <div className="flex items-center gap-2 text-muted-foreground animate-pulse"><Loader2 size={18} className="animate-spin" /> Thinking...</div> : aiResponse && <p className="text-sm leading-relaxed text-foreground">{aiResponse.explanation}</p>}
+          </div>
+        )}
+
+        {/* --- INLINE NAVIGATION (NEW: SITS ABOVE THE MAP) --- */}
+        <div className="w-full flex justify-between items-center mt-6">
+          <div className="w-1/3 flex justify-start">
+            <button onClick={handlePrevious} disabled={absoluteQuestionIndex === 1 || (mode === "tutor" && isLoading)} className={`px-5 py-2.5 rounded-md font-bold flex items-center gap-2 border border-border bg-card text-foreground transition-all hover:bg-muted ${absoluteQuestionIndex > 1 ? "" : "opacity-0 pointer-events-none"}`}>
+              <ChevronLeft size={18} strokeWidth={2.5} /> Prev
+            </button>
+          </div>
+          <div className="w-1/3 flex justify-center text-sm font-bold text-muted-foreground">
+            {absoluteQuestionIndex} / {totalQuestions}
+          </div>
+          <div className="w-1/3 flex justify-end">
+            {absoluteQuestionIndex === totalQuestions ? (
+              <button onClick={handleFinish} className="px-5 py-2.5 rounded-md font-bold flex items-center gap-2 bg-green-600 text-white hover:bg-green-700 transition-all">
+                <CheckCircle2 size={18} strokeWidth={2.5} /> Finish
+              </button>
+            ) : (
+              <button 
+                onClick={handleNext} 
+                disabled={(mode === "tutor" && (!hasChecked || isLoading))} 
+                className={`px-5 py-2.5 rounded-md font-bold flex items-center gap-2 transition-all 
+                  ${(mode === "tutor" && !hasChecked) ? "bg-muted text-muted-foreground opacity-50 cursor-not-allowed" : "bg-foreground text-background hover:opacity-90"}`}
+              >
+                Next <ChevronRight size={18} strokeWidth={2.5} />
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* --- EXAM MAP --- */}
+      <div className="w-full max-w-3xl mt-12 pt-6 border-t border-border">
+        <p className="text-xs font-bold text-muted-foreground mb-3 uppercase tracking-wider">Exam Progress Map</p>
+        <div className="flex flex-wrap gap-2">
+          {Array.from({ length: totalQuestions }).map((_, idx) => {
+            const isAnswered = !!userAnswers[idx];
+            const isCurrent = idx === absoluteQuestionIndex - 1;
+            return (
+              <button
+                key={idx}
+                onClick={() => jumpToQuestion(idx)}
+                className={`w-9 h-9 rounded-md flex items-center justify-center text-sm font-bold border transition-all cursor-pointer hover:bg-muted
+                  ${isCurrent ? "bg-primary text-primary-foreground border-primary" : isAnswered ? "bg-green-500/10 text-green-600 border-green-500/30" : "bg-card text-muted-foreground border-border"}`}
+              >
+                {idx + 1}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* --- BOTTOM FOOTER NAVIGATION --- */}
+      <footer className="w-full max-w-3xl flex justify-between items-center mt-8 pt-4">
+        <div className="w-1/3 flex justify-start">
+          <button onClick={handlePrevious} disabled={absoluteQuestionIndex === 1 || (mode === "tutor" && isLoading)} className={`px-5 py-2.5 rounded-md font-bold flex items-center gap-2 border border-border bg-card text-foreground transition-all hover:bg-muted ${absoluteQuestionIndex > 1 ? "" : "opacity-0 pointer-events-none"}`}>
+            <ChevronLeft size={18} strokeWidth={2.5} /> Prev
+          </button>
+        </div>
+        <div className="w-1/3 flex justify-center text-sm font-bold text-muted-foreground">
+          {absoluteQuestionIndex} / {totalQuestions}
+        </div>
+        <div className="w-1/3 flex justify-end">
+          {absoluteQuestionIndex === totalQuestions ? (
+            <button onClick={handleFinish} className="px-5 py-2.5 rounded-md font-bold flex items-center gap-2 bg-green-600 text-white hover:bg-green-700 transition-all">
+              <CheckCircle2 size={18} strokeWidth={2.5} /> Finish
+            </button>
+          ) : (
+            <button 
+            onClick={handleNext} 
+            disabled={(mode === "tutor" && isLoading)} 
+            className={`px-5 py-2.5 rounded-md font-bold flex items-center gap-2 transition-all 
+                ${(mode === "tutor" && isLoading) ? "bg-muted text-muted-foreground opacity-50 cursor-not-allowed" : "bg-foreground text-background hover:opacity-90"}`}
+            >
+            Next <ChevronRight size={18} strokeWidth={2.5} />
+            </button>
+          )}
+        </div>
+      </footer>
+    </main>
+  );
+}
+
+export default function QuizPage() {
+  return <Suspense><QuizContent /></Suspense>;
+}
