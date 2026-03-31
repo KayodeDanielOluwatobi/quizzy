@@ -38,11 +38,11 @@ export default function Home() {
           <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-primary text-primary-foreground mb-4">
             <BrainCircuit size={32} strokeWidth={2.5} />
           </div>
-          <h1 className="text-3xl font-extrabold text-foreground leading-none mb-2">
+          <h1 className="text-3xl font-bold text-foreground leading-none mb-2">
             Quizzy
           </h1>
           <p className="text-sm font-bold text-muted-foreground uppercase tracking-wider">
-            ANA 205 • Lower Limbs
+            BCH 201 • Biochemistry
           </p>
         </div>
 
@@ -55,7 +55,7 @@ export default function Home() {
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="e.g. Prevailer"
+            placeholder="e.g. PFIRE"
             className="w-full rounded-md border border-input bg-background px-4 py-3 text-foreground font-normal placeholder:text-muted-foreground placeholder:opacity-30 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-all"
           />
         </div>

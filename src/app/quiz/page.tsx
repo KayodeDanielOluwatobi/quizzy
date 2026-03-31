@@ -4,17 +4,11 @@ import { useState, useEffect, Suspense, useMemo } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import { supabase } from "@/lib/supabase"; 
-import { Sun, Moon, Clock, User, ChevronRight, ChevronLeft, CheckCircle2, XCircle, BrainCircuit, Loader2, Timer } from "lucide-react";
-
-interface AIResponse {
-  explanation: string;
-  technicalDetails?: string;
-  errorCode?: string;
-}
+import { Sun, Moon, Clock, User, ChevronRight, ChevronLeft, CheckCircle2, XCircle, BrainCircuit, Loader2, Timer, BookOpen } from "lucide-react";
 
 // ⚠️ MASTER EXAM SETTINGS ⚠️
-const EXAM_DURATION_MINUTES = 60; 
-const TOTAL_EXAM_QUESTIONS = 60; 
+const EXAM_DURATION_MINUTES = 30; 
+const TOTAL_EXAM_QUESTIONS = 50; 
 
 function QuizContent() {
   const searchParams = useSearchParams();
@@ -33,10 +27,8 @@ function QuizContent() {
   const [currentQ, setCurrentQ] = useState(0); 
   const [userAnswers, setUserAnswers] = useState<Record<number, string>>({}); 
 
-  // --- 3. AI TUTOR STATE ---
+  // --- 3. TUTOR STATE (Manual, No AI) ---
   const [hasChecked, setHasChecked] = useState(false);
-  const [aiResponse, setAiResponse] = useState<AIResponse | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
 
   // --- 4. TIMER STATE ---
   const TOTAL_SECONDS = EXAM_DURATION_MINUTES * 60;
@@ -77,7 +69,7 @@ function QuizContent() {
       const { data, error } = await supabase
         .from('course_sections')
         .select('*')
-        .eq('course_code', 'ANA 205')
+        .eq('course_code', 'BCH 201')
         .order('id', { ascending: true });
 
       if (error) console.error("DB Error:", error);
@@ -90,7 +82,7 @@ function QuizContent() {
             return { ...section, questions: shuffledQuestions.slice(0, limitPerSection) };
           });
           setSectionsData(randomizedExamData);
-          localStorage.setItem("boggle_examData", JSON.stringify(randomizedExamData));
+          localStorage.setItem("boggle_examData", JSON.stringify(randomizedExamData)); // Save for results page review
         } else {
           setSectionsData(data);
         }
@@ -154,7 +146,6 @@ function QuizContent() {
   const handleNext = () => {
     if (!activeSection) return;
     setHasChecked(false); 
-    setAiResponse(null);
 
     if (currentQ < activeSection.questions.length - 1) {
       setCurrentQ(prev => prev + 1);
@@ -166,7 +157,6 @@ function QuizContent() {
 
   const handlePrevious = () => {
     setHasChecked(false);
-    setAiResponse(null);
 
     if (currentQ > 0) {
       setCurrentQ(prev => prev - 1);
@@ -178,7 +168,6 @@ function QuizContent() {
 
   const jumpToQuestion = (targetAbsoluteIndex: number) => {
     setHasChecked(false); 
-    setAiResponse(null);
 
     let count = 0;
     for (let s = 0; s < sectionsData.length; s++) {
@@ -194,8 +183,6 @@ function QuizContent() {
 
   const jumpToSection = (index: number) => {
     setHasChecked(false); 
-    setAiResponse(null);
-
     setCurrentSectionIndex(index);
     setCurrentQ(0); 
   };
@@ -210,32 +197,15 @@ function QuizContent() {
       });
     });
 
-    // DO NOT WIPE MEMORY HERE! The Results Page needs to read it first.
-    // We only wipe the timer so the exam locks.
     localStorage.removeItem("boggle_timeLeft");
 
     router.push(`/results?name=${encodeURIComponent(name)}&mode=${mode}&score=${finalScore}&total=${totalQuestions}`);
   };
 
-  // --- AI LOGIC ---
-  const checkAnswer = async () => {
+  // --- MANUAL CHECK LOGIC (INSTANT) ---
+  const checkAnswer = () => {
     if (!selectedOption || !question) return;
-    setIsLoading(true);
-    setHasChecked(true);
-
-    try {
-      const res = await fetch("/api/gemini", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, question: question.question, selectedOption, correctAnswer: question.correct, isCorrect: selectedOption === question.correct }),
-      });
-      const data = await res.json();
-      setAiResponse({ explanation: data.explanation });
-    } catch (error) {
-      setAiResponse({ explanation: "Oops! Network error." });
-    } finally {
-      setIsLoading(false);
-    }
+    setHasChecked(true); // Instant reveal!
   };
 
   if (isFetchingDB) return <main className="flex min-h-screen items-center justify-center bg-background"><Loader2 size={40} className="animate-spin text-primary" /></main>;
@@ -261,7 +231,7 @@ function QuizContent() {
           </div>
           <div>
             <h1 className="text-sm font-bold text-muted-foreground uppercase">{activeSection.course_code}</h1>
-            <p className="text-lg md:text-xl font-extrabold leading-none text-foreground mt-0.5">Gross Anatomy of Lower Limbs</p>
+            <p className="text-lg md:text-xl font-bold leading-none text-foreground mt-0.5">Biochemistry</p>
           </div>
         </div>
         <div className="flex items-center gap-3">
@@ -323,18 +293,42 @@ function QuizContent() {
           </button>
         )}
 
-        {/* --- AI TUTOR OUTPUT --- */}
+        {/* --- DYNAMIC EXPLANATION OUTPUT (INSTANT) --- */}
         {mode === "tutor" && hasChecked && (
-          <div className="mt-6 p-5 rounded-lg border border-border bg-muted/30">
-            <div className="flex items-center gap-2 mb-3 text-primary font-bold"><BrainCircuit size={20} /> AI Verdict:</div>
-            {isLoading ? <div className="flex items-center gap-2 text-muted-foreground animate-pulse"><Loader2 size={18} className="animate-spin" /> Thinking...</div> : aiResponse && <p className="text-sm leading-relaxed text-foreground">{aiResponse.explanation}</p>}
+          <div className={`mt-6 p-5 rounded-lg border transition-all animate-in fade-in slide-in-from-bottom-2
+            ${selectedOption === question.correct ? 'bg-green-500/10 border-green-500/20' : 'bg-red-500/10 border-red-500/20'}`}
+          >
+            {/* Verdict Header */}
+            <div className={`flex items-center gap-2 mb-3 font-black text-lg
+              ${selectedOption === question.correct ? 'text-green-600 dark:text-green-500' : 'text-red-600 dark:text-red-500'}`}
+            >
+              {selectedOption === question.correct ? <CheckCircle2 size={22} strokeWidth={2.5} /> : <XCircle size={22} strokeWidth={2.5} />} 
+              {selectedOption === question.correct ? "Correct!" : "Incorrect!"}
+            </div>
+            
+            {/* Show correct answer if they failed it */}
+            {selectedOption !== question.correct && (
+              <p className="text-sm font-medium text-foreground mb-4 bg-background/50 p-3 rounded-md border border-border">
+                The right answer is: <span className="font-bold text-green-600 dark:text-green-500">{question.correct}</span>
+              </p>
+            )}
+
+            {/* The Explanation */}
+            <div className="border-t border-border/50 pt-4 mt-2">
+              <div className="flex items-center gap-2 mb-2 text-foreground font-bold text-xs uppercase tracking-wider">
+                <BookOpen size={14} className="text-primary" /> Why?
+              </div>
+              <p className="text-sm md:text-base leading-relaxed text-foreground/90">
+                {question.explanation || "No explanation provided for this question."}
+              </p>
+            </div>
           </div>
         )}
 
-        {/* --- INLINE NAVIGATION (NEW: SITS ABOVE THE MAP) --- */}
+        {/* --- INLINE NAVIGATION --- */}
         <div className="w-full flex justify-between items-center mt-6">
           <div className="w-1/3 flex justify-start">
-            <button onClick={handlePrevious} disabled={absoluteQuestionIndex === 1 || (mode === "tutor" && isLoading)} className={`px-5 py-2.5 rounded-md font-bold flex items-center gap-2 border border-border bg-card text-foreground transition-all hover:bg-muted ${absoluteQuestionIndex > 1 ? "" : "opacity-0 pointer-events-none"}`}>
+            <button onClick={handlePrevious} disabled={absoluteQuestionIndex === 1} className={`px-5 py-2.5 rounded-md font-bold flex items-center gap-2 border border-border bg-card text-foreground transition-all hover:bg-muted ${absoluteQuestionIndex > 1 ? "" : "opacity-0 pointer-events-none"}`}>
               <ChevronLeft size={18} strokeWidth={2.5} /> Prev
             </button>
           </div>
@@ -349,9 +343,7 @@ function QuizContent() {
             ) : (
               <button 
                 onClick={handleNext} 
-                disabled={(mode === "tutor" && (!hasChecked || isLoading))} 
-                className={`px-5 py-2.5 rounded-md font-bold flex items-center gap-2 transition-all 
-                  ${(mode === "tutor" && !hasChecked) ? "bg-muted text-muted-foreground opacity-50 cursor-not-allowed" : "bg-foreground text-background hover:opacity-90"}`}
+                className={`px-5 py-2.5 rounded-md font-bold flex items-center gap-2 transition-all bg-foreground text-background hover:opacity-90`}
               >
                 Next <ChevronRight size={18} strokeWidth={2.5} />
               </button>
@@ -384,7 +376,7 @@ function QuizContent() {
       {/* --- BOTTOM FOOTER NAVIGATION --- */}
       <footer className="w-full max-w-3xl flex justify-between items-center mt-8 pt-4">
         <div className="w-1/3 flex justify-start">
-          <button onClick={handlePrevious} disabled={absoluteQuestionIndex === 1 || (mode === "tutor" && isLoading)} className={`px-5 py-2.5 rounded-md font-bold flex items-center gap-2 border border-border bg-card text-foreground transition-all hover:bg-muted ${absoluteQuestionIndex > 1 ? "" : "opacity-0 pointer-events-none"}`}>
+          <button onClick={handlePrevious} disabled={absoluteQuestionIndex === 1} className={`px-5 py-2.5 rounded-md font-bold flex items-center gap-2 border border-border bg-card text-foreground transition-all hover:bg-muted ${absoluteQuestionIndex > 1 ? "" : "opacity-0 pointer-events-none"}`}>
             <ChevronLeft size={18} strokeWidth={2.5} /> Prev
           </button>
         </div>
@@ -398,12 +390,10 @@ function QuizContent() {
             </button>
           ) : (
             <button 
-            onClick={handleNext} 
-            disabled={(mode === "tutor" && isLoading)} 
-            className={`px-5 py-2.5 rounded-md font-bold flex items-center gap-2 transition-all 
-                ${(mode === "tutor" && isLoading) ? "bg-muted text-muted-foreground opacity-50 cursor-not-allowed" : "bg-foreground text-background hover:opacity-90"}`}
+              onClick={handleNext} 
+              className={`px-5 py-2.5 rounded-md font-bold flex items-center gap-2 transition-all bg-foreground text-background hover:opacity-90`}
             >
-            Next <ChevronRight size={18} strokeWidth={2.5} />
+              Next <ChevronRight size={18} strokeWidth={2.5} />
             </button>
           )}
         </div>
