@@ -4,7 +4,7 @@ import { useState, useEffect, Suspense, useMemo } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import { supabase } from "@/lib/supabase"; 
-import { Sun, Moon, Clock, User, ChevronRight, ChevronLeft, CheckCircle2, XCircle, BrainCircuit, Loader2, Timer, BookOpen } from "lucide-react";
+import { Sun, Moon, ChevronRight, ChevronLeft, CheckCircle2, XCircle, BrainCircuit, Loader2, Timer, BookOpen } from "lucide-react";
 
 // ⚠️ MASTER EXAM SETTINGS ⚠️
 const EXAM_DURATION_MINUTES = 30; 
@@ -15,8 +15,11 @@ function QuizContent() {
   const router = useRouter();
   const { theme, setTheme } = useTheme();
 
+  // Dynamic URL Parameters
   const name = searchParams.get("name") || "Comrade";
   const mode = searchParams.get("mode") || "exam"; 
+  const courseCode = searchParams.get("course") || "ANA 205";
+  const courseTitle = searchParams.get("title") || "Gross Anatomy of Lower Limbs";
 
   // --- 1. SUPABASE STATE ---
   const [sectionsData, setSectionsData] = useState<any[]>([]);
@@ -63,13 +66,13 @@ function QuizContent() {
     }
   }, [timeLeft, mode]);
 
-  // --- FETCH ALL SECTIONS ---
+  // --- FETCH ALL SECTIONS DYNAMICALLY ---
   useEffect(() => {
     const fetchQuiz = async () => {
       const { data, error } = await supabase
         .from('course_sections')
         .select('*')
-        .eq('course_code', 'BCH 201')
+        .eq('course_code', courseCode) // Uses URL param
         .order('id', { ascending: true });
 
       if (error) console.error("DB Error:", error);
@@ -82,7 +85,7 @@ function QuizContent() {
             return { ...section, questions: shuffledQuestions.slice(0, limitPerSection) };
           });
           setSectionsData(randomizedExamData);
-          localStorage.setItem("boggle_examData", JSON.stringify(randomizedExamData)); // Save for results page review
+          localStorage.setItem("boggle_examData", JSON.stringify(randomizedExamData)); 
         } else {
           setSectionsData(data);
         }
@@ -90,7 +93,7 @@ function QuizContent() {
       setIsFetchingDB(false);
     };
     fetchQuiz();
-  }, [mode]);
+  }, [mode, courseCode]);
 
   // --- DERIVED METRICS ---
   const totalQuestions = useMemo(() => sectionsData.reduce((acc, sec) => acc + sec.questions.length, 0), [sectionsData]);
@@ -205,7 +208,7 @@ function QuizContent() {
   // --- MANUAL CHECK LOGIC (INSTANT) ---
   const checkAnswer = () => {
     if (!selectedOption || !question) return;
-    setHasChecked(true); // Instant reveal!
+    setHasChecked(true); 
   };
 
   if (isFetchingDB) return <main className="flex min-h-screen items-center justify-center bg-background"><Loader2 size={40} className="animate-spin text-primary" /></main>;
@@ -231,7 +234,7 @@ function QuizContent() {
           </div>
           <div>
             <h1 className="text-sm font-bold text-muted-foreground uppercase">{activeSection.course_code}</h1>
-            <p className="text-lg md:text-xl font-bold leading-none text-foreground mt-0.5">Biochemistry</p>
+            <p className="text-lg md:text-xl font-extrabold leading-none text-foreground mt-0.5">{courseTitle}</p>
           </div>
         </div>
         <div className="flex items-center gap-3">
@@ -298,7 +301,6 @@ function QuizContent() {
           <div className={`mt-6 p-5 rounded-lg border transition-all animate-in fade-in slide-in-from-bottom-2
             ${selectedOption === question.correct ? 'bg-green-500/10 border-green-500/20' : 'bg-red-500/10 border-red-500/20'}`}
           >
-            {/* Verdict Header */}
             <div className={`flex items-center gap-2 mb-3 font-black text-lg
               ${selectedOption === question.correct ? 'text-green-600 dark:text-green-500' : 'text-red-600 dark:text-red-500'}`}
             >
@@ -306,14 +308,12 @@ function QuizContent() {
               {selectedOption === question.correct ? "Correct!" : "Incorrect!"}
             </div>
             
-            {/* Show correct answer if they failed it */}
             {selectedOption !== question.correct && (
               <p className="text-sm font-medium text-foreground mb-4 bg-background/50 p-3 rounded-md border border-border">
                 The right answer is: <span className="font-bold text-green-600 dark:text-green-500">{question.correct}</span>
               </p>
             )}
 
-            {/* The Explanation */}
             <div className="border-t border-border/50 pt-4 mt-2">
               <div className="flex items-center gap-2 mb-2 text-foreground font-bold text-xs uppercase tracking-wider">
                 <BookOpen size={14} className="text-primary" /> Why?

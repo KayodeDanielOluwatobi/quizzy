@@ -3,80 +3,116 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
-import { Sun, Moon, BrainCircuit, User, GraduationCap, Timer } from "lucide-react";
+import { BrainCircuit, Play, User, BookOpen, GraduationCap, Sun, Moon } from "lucide-react";
 
-export default function Home() {
-  const { setTheme, theme } = useTheme();
-  const [name, setName] = useState("");
+// 📚 ADD YOUR COURSES HERE
+const AVAILABLE_COURSES = [
+  { code: "BCH 201", title: "Biochemistry" },
+  { code: "MCB 201", title: "Bacterial Growth & Measurement" },
+];
+
+export default function HomePage() {
   const router = useRouter();
+  const { theme, setTheme } = useTheme();
 
-  const startQuiz = (mode: "tutor" | "exam") => {
+  const [name, setName] = useState("");
+  const [mode, setMode] = useState("exam");
+  const [selectedCourse, setSelectedCourse] = useState(AVAILABLE_COURSES[0]); 
+
+  const handleStart = () => {
     if (!name.trim()) {
-      alert("Please enter your name first!");
+      alert("Comrade, please enter your name!");
       return;
     }
-    router.push(`/quiz?name=${encodeURIComponent(name)}&mode=${mode}`);
+    
+    // Push Name, Mode, Course Code, and Course Title to the URL
+    router.push(
+      `/quiz?name=${encodeURIComponent(name)}&mode=${mode}&course=${encodeURIComponent(selectedCourse.code)}&title=${encodeURIComponent(selectedCourse.title)}`
+    );
   };
 
   return (
-    <main className="relative flex min-h-screen flex-col items-center justify-center bg-background text-foreground transition-colors duration-300 p-6 font-sans">
+    <main className="flex min-h-screen flex-col items-center justify-center bg-background text-foreground transition-colors duration-300 p-6 font-sans">
       
-      {/* --- FLAT THEME TOGGLE --- */}
-      <button
-        onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-        className="absolute top-6 right-6 p-2 rounded-md border border-border bg-card hover:bg-muted transition-colors flex items-center justify-center text-muted-foreground hover:text-foreground"
-        aria-label="Toggle Theme"
-      >
-        {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
-      </button>
+      {/* Theme Toggle */}
+      <div className="absolute top-6 right-6">
+        <button onClick={() => setTheme(theme === "dark" ? "light" : "dark")} className="p-2 rounded-md bg-muted text-foreground hover:bg-muted/80 transition-colors">
+          {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
+        </button>
+      </div>
 
-      {/* --- FLAT ENTRY CARD --- */}
-      <div className="w-full max-w-md rounded-xl bg-card border border-border p-8">
+      <div className="w-full max-w-xl rounded-2xl bg-card border border-border p-8 md:p-10 shadow-2xl flex flex-col items-center animate-in zoom-in-95 duration-500">
         
-        {/* --- ALIGNED HEADER (Matches Quiz Page) --- */}
-        <div className="flex flex-col items-center text-center mb-8">
-          <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-primary text-primary-foreground mb-4">
-            <BrainCircuit size={32} strokeWidth={2.5} />
-          </div>
-          <h1 className="text-3xl font-bold text-foreground leading-none mb-2">
-            Quizzy
-          </h1>
-          <p className="text-sm font-bold text-muted-foreground uppercase tracking-wider">
-            BCH 201 • Biochemistry
-          </p>
+        {/* Header */}
+        <div className="bg-primary/10 p-4 rounded-xl mb-6">
+          <BrainCircuit size={48} className="text-primary" strokeWidth={2} />
         </div>
+        <h1 className="text-3xl font-bold mb-2 text-foreground ">Quizzy</h1>
+        <p className="text-muted-foreground mb-8 text-sm font-medium uppercase tracking-widest">Select your battle</p>
 
-        {/* --- FLAT INPUT FIELD --- */}
-        <div className="mb-6">
-          <label className="mb-2 text-sm font-bold text-muted-foreground flex items-center gap-2">
-            <User size={16} /> ENTER YOUR NAME
+        {/* 1. Name Input */}
+        <div className="w-full mb-6">
+          <label className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-2 flex items-center gap-2">
+            <User size={14} /> Student Name
           </label>
           <input
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="e.g. PFIRE"
-            className="w-full rounded-md border border-input bg-background px-4 py-3 text-foreground font-normal placeholder:text-muted-foreground placeholder:opacity-30 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-all"
+            className="w-full rounded-md border border-input bg-background px-4 py-3.5 text-foreground font-medium placeholder:text-muted-foreground placeholder:opacity-30 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-all"
           />
         </div>
 
-        {/* --- FLAT ACTION BUTTONS --- */}
-        <div className="space-y-3">
-          <button
-            onClick={() => startQuiz("tutor")}
-            className="w-full rounded-md bg-primary px-4 py-3 font-bold text-primary-foreground transition-all hover:bg-primary/90 flex items-center justify-center gap-2"
-          >
-            <GraduationCap size={20} strokeWidth={2.5} /> Start Tutor Mode
-          </button>
-          
-          <button
-            onClick={() => startQuiz("exam")}
-            className="w-full rounded-md border border-red-600 bg-red-600/10 px-4 py-3 font-bold text-red-600 transition-all hover:bg-red-600 hover:text-white flex items-center justify-center gap-2"
-          >
-            <Timer size={20} strokeWidth={2.5} /> Start Exam Mode
-          </button>
+        {/* 2. Course Selection Grid */}
+        <div className="w-full mb-6">
+          <label className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-2 flex items-center gap-2">
+            <BookOpen size={14} /> Select Course
+          </label>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {AVAILABLE_COURSES.map((course) => (
+              <button
+                key={course.code}
+                onClick={() => setSelectedCourse(course)}
+                className={`flex flex-col text-left p-4 rounded-lg border transition-all 
+                  ${selectedCourse.code === course.code ? 'bg-primary/10 border-primary text-primary' : 'bg-background border-border text-foreground hover:bg-muted'}`}
+              >
+                <span className="font-black text-sm uppercase tracking-wider">{course.code}</span>
+                <span className="text-xs font-medium mt-1 opacity-80 line-clamp-1">{course.title}</span>
+              </button>
+            ))}
+          </div>
         </div>
 
+        {/* 3. Mode Selection */}
+        <div className="w-full mb-8">
+          <label className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-2 flex items-center gap-2">
+            <GraduationCap size={14} /> Exam Mode
+          </label>
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              onClick={() => setMode("exam")}
+              className={`py-3 rounded-lg font-bold transition-all border ${mode === 'exam' ? 'bg-red-500/10 border-red-500/50 text-red-600' : 'bg-background border-border text-foreground hover:bg-muted'}`}
+            >
+              Strict Exam (30m)
+            </button>
+            <button
+              onClick={() => setMode("tutor")}
+              className={`py-3 rounded-lg font-bold transition-all border ${mode === 'tutor' ? 'bg-blue-500/10 border-blue-500/50 text-blue-600' : 'bg-background border-border text-foreground hover:bg-muted'}`}
+            >
+              Tutor Mode (Untimed)
+            </button>
+          </div>
+        </div>
+
+        {/* 4. Start Button */}
+        <button
+          onClick={handleStart}
+          className="w-full flex items-center justify-center gap-2 rounded-lg bg-foreground text-background px-6 py-4 font-black text-lg transition-all hover:opacity-90 active:scale-95 shadow-md uppercase tracking-wider"
+        >
+          <Play size={20} fill="currentColor" /> Enter Portal
+        </button>
+        
       </div>
     </main>
   );

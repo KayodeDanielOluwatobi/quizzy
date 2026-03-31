@@ -19,7 +19,7 @@ function ResultsContent() {
   const [examData, setExamData] = useState<any[]>([]);
   const [userAnswers, setUserAnswers] = useState<Record<number, string>>({});
 
-  // Fetch the Exact Exam Paper and Answers from Memory
+  // Fetch Exam Paper from Memory
   useEffect(() => {
     if (typeof window !== "undefined") {
       const savedData = localStorage.getItem("boggle_examData");
@@ -30,12 +30,10 @@ function ResultsContent() {
     }
   }, []);
 
-  // Flatten questions for easy mapping
   const flatQuestions = useMemo(() => {
     return examData.reduce((acc, section) => [...acc, ...section.questions], []);
   }, [examData]);
 
-  // Clean Up Memory when leaving the page to Home or Retake
   const cleanUpAndRoute = (path: string) => {
     localStorage.removeItem("boggle_userAnswers");
     localStorage.removeItem("boggle_examData");
@@ -54,7 +52,7 @@ function ResultsContent() {
 
   if (percentage >= 80) {
     grade = "A";
-    verdict = "Distinction! Omo, you are an Anatomy god. 👑";
+    verdict = "Distinction! Omo, you are a god. 👑";
     accentColor = "text-emerald-600 bg-emerald-500/10 border-emerald-500/20";
   } else if (percentage >= 60) {
     grade = "B";
@@ -66,25 +64,21 @@ function ResultsContent() {
     accentColor = "text-amber-600 bg-amber-500/10 border-amber-500/20";
   } else {
     grade = "F";
-    verdict = "Ah ah! You fumbled ANA 205. See me in my office. 🥲";
+    verdict = "Ah ah! You fumbled this one. See me in my office. 🥲";
     accentColor = "text-red-600 bg-red-500/10 border-red-500/20";
   }
 
   return (
     <div className={`w-full ${showReview ? 'max-w-4xl' : 'max-w-lg'} transition-all duration-500 rounded-xl bg-card border border-border p-8 md:p-10 flex flex-col items-center`}>
       
-      {/* --- DASHBOARD HEADER --- */}
       <div className="flex flex-col items-center text-center mb-10 w-full">
         <div className="flex items-center gap-2 mb-3">
           <BrainCircuit className="text-primary" size={24} strokeWidth={2.5} />
-          <span className="text-xs font-black tracking-widest uppercase text-muted-foreground">BoggleVerse Analytics</span>
+          <span className="text-xs font-black tracking-widest uppercase text-muted-foreground">Quizzy Analytics</span>
         </div>
         <h1 className="text-3xl font-black text-foreground uppercase tracking-tight leading-none mb-1">
           Exam Report
         </h1>
-        <p className="text-sm font-bold text-muted-foreground uppercase tracking-wider">
-          ANA 205 • Lower Limbs
-        </p>
       </div>
 
       <div className={`w-full flex ${showReview ? 'flex-col md:flex-row gap-8 items-start' : 'flex-col items-center'}`}>
@@ -124,7 +118,6 @@ function ResultsContent() {
           </div>
 
           <div className="w-full space-y-3">
-            {/* TOGGLE REVIEW BUTTON */}
             {mode === "exam" && flatQuestions.length > 0 && (
               <button
                 onClick={() => setShowReview(!showReview)}
@@ -135,10 +128,6 @@ function ResultsContent() {
                 {showReview ? "Hide Review" : "Review My Answers"}
               </button>
             )}
-
-            <button onClick={() => cleanUpAndRoute(`/quiz?name=${encodeURIComponent(name)}&mode=${mode}`)} className="w-full flex items-center justify-center gap-2 rounded-md bg-primary px-4 py-3.5 font-bold text-primary-foreground transition-all hover:bg-primary/90">
-              <RotateCcw size={18} strokeWidth={2.5} /> Retake Assessment
-            </button>
             <button onClick={() => cleanUpAndRoute("/")} className="w-full flex items-center justify-center gap-2 rounded-md border border-border bg-card px-4 py-3.5 font-bold text-foreground transition-all hover:bg-muted">
               <ArrowLeft size={18} strokeWidth={2.5} /> Return to Dashboard
             </button>
@@ -167,7 +156,6 @@ function ResultsContent() {
                   </h3>
                   
                   <div className="space-y-2">
-                    {/* User's Choice */}
                     <div className="flex items-start gap-2">
                       {isCorrect ? <CheckCircle2 size={16} className="text-green-600 mt-0.5" /> : isUnanswered ? <AlertCircle size={16} className="text-amber-600 mt-0.5" /> : <XCircle size={16} className="text-red-600 mt-0.5" />}
                       <div>
@@ -178,7 +166,6 @@ function ResultsContent() {
                       </div>
                     </div>
 
-                    {/* Correct Answer (Only show if they got it wrong) */}
                     {!isCorrect && (
                       <div className="flex items-start gap-2 mt-2 pt-2 border-t border-border/50">
                         <CheckCircle2 size={16} className="text-green-600 mt-0.5" />
@@ -194,7 +181,6 @@ function ResultsContent() {
             })}
           </div>
         )}
-
       </div>
     </div>
   );
