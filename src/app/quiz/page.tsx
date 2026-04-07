@@ -7,8 +7,8 @@ import { supabase } from "@/lib/supabase";
 import { Sun, Moon, ChevronRight, ChevronLeft, CheckCircle2, XCircle, BrainCircuit, Loader2, Timer, BookOpen } from "lucide-react";
 
 // ⚠️ MASTER EXAM SETTINGS ⚠️
-const EXAM_DURATION_MINUTES = 30; 
-const TOTAL_EXAM_QUESTIONS = 50; 
+const EXAM_DURATION_MINUTES = 60; // 1 hour for 1000 questions? Omo, change this to what the client wants!
+const TOTAL_EXAM_QUESTIONS = 1000; 
 
 function QuizContent() {
   const searchParams = useSearchParams();
@@ -28,9 +28,9 @@ function QuizContent() {
   // --- 2. QUIZ STATE & MEMORY ---
   const [currentSectionIndex, setCurrentSectionIndex] = useState(0); 
   const [currentQ, setCurrentQ] = useState(0); 
-  const [userAnswers, setUserAnswers] = useState<Record<number, string>>({}); 
+  const [userAnswers, setUserAnswers] = useState<Record<number, any>>({}); 
 
-  // --- 3. TUTOR STATE (Manual, No AI) ---
+  // --- 3. TUTOR STATE ---
   const [hasChecked, setHasChecked] = useState(false);
 
   // --- 4. TIMER STATE ---
@@ -72,14 +72,18 @@ function QuizContent() {
       const { data, error } = await supabase
         .from('course_sections')
         .select('*')
-        .eq('course_code', courseCode) // Uses URL param
+        .eq('course_code', courseCode)
         .order('id', { ascending: true });
 
       if (error) console.error("DB Error:", error);
 
       if (data && data.length > 0) {
         if (mode === "exam") {
-          const limitPerSection = Math.ceil(TOTAL_EXAM_QUESTIONS / data.length);
+          // If total questions requested is higher than DB, limit it to DB size to prevent crashes
+          const dbTotal = data.reduce((acc, sec) => acc + sec.questions.length, 0);
+          const limit = Math.min(TOTAL_EXAM_QUESTIONS, dbTotal);
+          const limitPerSection = Math.ceil(limit / data.length);
+          
           const randomizedExamData = data.map(section => {
             const shuffledQuestions = [...section.questions].sort(() => 0.5 - Math.random());
             return { ...section, questions: shuffledQuestions.slice(0, limitPerSection) };
@@ -97,6 +101,7 @@ function QuizContent() {
 
   // --- DERIVED METRICS ---
   const totalQuestions = useMemo(() => sectionsData.reduce((acc, sec) => acc + sec.questions.length, 0), [sectionsData]);
+  const flatQuestions = useMemo(() => sectionsData.reduce((acc, sec) => [...acc, ...sec.questions], []), [sectionsData]);
   
   const absoluteQuestionIndex = useMemo(() => {
     if (sectionsData.length === 0) return 0;
@@ -107,7 +112,9 @@ function QuizContent() {
     return count + currentQ + 1;
   }, [sectionsData, currentSectionIndex, currentQ]);
 
-  const selectedOption = userAnswers[absoluteQuestionIndex - 1] || null;
+  const activeSection = sectionsData.length > 0 ? sectionsData[currentSectionIndex] : null;
+  const question = activeSection ? activeSection.questions[currentQ] : null;
+  const selectedAnswer = userAnswers[absoluteQuestionIndex - 1] || null;
 
   // --- SMART TIMER LOGIC ---
   useEffect(() => {
@@ -123,9 +130,12 @@ function QuizContent() {
   }, [timeLeft]);
 
   const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
+    const hours = Math.floor(seconds / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
     const secs = seconds % 60;
-    return `${mins < 10 ? "0" : ""}${mins}:${secs < 10 ? "0" : ""}${secs}`;
+    return hours > 0 
+      ? `${hours}:${mins < 10 ? "0" : ""}${mins}:${secs < 10 ? "0" : ""}${secs}`
+      : `${mins < 10 ? "0" : ""}${mins}:${secs < 10 ? "0" : ""}${secs}`;
   };
 
   const getTimerStyles = () => {
@@ -136,13 +146,21 @@ function QuizContent() {
     return 'bg-red-500 text-white border-red-600 animate-pulse'; 
   };
 
-  const activeSection = sectionsData.length > 0 ? sectionsData[currentSectionIndex] : null;
-  const question = activeSection ? activeSection.questions[currentQ] : null;
-
-  // --- HANDLE OPTION CLICK ---
-  const handleOptionSelect = (option: string) => {
+  // --- HANDLE OPTION CLICKS ---
+  const handleMcqSelect = (option: string) => {
     if (hasChecked && mode === "tutor") return; 
     setUserAnswers(prev => ({ ...prev, [absoluteQuestionIndex - 1]: option }));
+  };
+
+  const handleMtfSelect = (statementIndex: number, value: "T" | "F") => {
+    if (hasChecked && mode === "tutor") return; 
+    setUserAnswers(prev => {
+      const currentMtfAnswers = (prev[absoluteQuestionIndex - 1] as any) || {};
+      return {
+        ...prev,
+        [absoluteQuestionIndex - 1]: { ...currentMtfAnswers, [statementIndex]: value }
+      };
+    });
   };
 
   // --- NAVIGATION CONTROLS ---
@@ -171,7 +189,6 @@ function QuizContent() {
 
   const jumpToQuestion = (targetAbsoluteIndex: number) => {
     setHasChecked(false); 
-
     let count = 0;
     for (let s = 0; s < sectionsData.length; s++) {
       const sectionLength = sectionsData[s].questions.length;
@@ -192,22 +209,42 @@ function QuizContent() {
 
   const handleFinish = () => {
     let finalScore = 0;
-    let questionCounter = 0;
-    sectionsData.forEach(section => {
-      section.questions.forEach((q: any) => {
-        if (userAnswers[questionCounter] === q.correct) finalScore += 1;
-        questionCounter++;
-      });
+    
+    // Advanced Scoring Algorithm for mixed MCQ/MTF
+    flatQuestions.forEach((q: any, idx: number) => {
+      const userPick = userAnswers[idx];
+      
+      if (!userPick) return; // Skipped question
+      
+      if (q.type === 'mtf') {
+        // Partial marking: e.g. 5 options. Each correct option is worth 1/5 points
+        let correctStatements = 0;
+        q.correct.forEach((c: string, i: number) => {
+          if (userPick[i] === c) correctStatements += 1;
+        });
+        finalScore += (correctStatements / q.options.length);
+      } else {
+        // Standard MCQ
+        if (userPick === q.correct) finalScore += 1;
+      }
     });
 
     localStorage.removeItem("boggle_timeLeft");
 
-    router.push(`/results?name=${encodeURIComponent(name)}&mode=${mode}&score=${finalScore}&total=${totalQuestions}`);
+    // Math.round to avoid weird decimals like 95.6000000001
+    router.push(`/results?name=${encodeURIComponent(name)}&mode=${mode}&score=${Math.round(finalScore)}&total=${totalQuestions}`);
   };
 
-  // --- MANUAL CHECK LOGIC (INSTANT) ---
   const checkAnswer = () => {
-    if (!selectedOption || !question) return;
+    // Prevent checking if MTF isn't fully answered
+    if (question.type === 'mtf') {
+      const answeredCount = selectedAnswer ? Object.keys(selectedAnswer).length : 0;
+      if (answeredCount < question.options.length) {
+        alert("Comrade, answer all True/False options before checking!");
+        return;
+      }
+    } else if (!selectedAnswer) return;
+
     setHasChecked(true); 
   };
 
@@ -229,16 +266,16 @@ function QuizContent() {
 
       <header className="w-full max-w-3xl mb-6 flex items-center justify-between pb-4 border-b border-border">
         <div className="flex items-center gap-3">
-          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary text-primary-foreground">
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary text-primary-foreground shrink-0">
             <BrainCircuit size={24} strokeWidth={2.5} />
           </div>
           <div>
             <h1 className="text-sm font-bold text-muted-foreground uppercase">{activeSection.course_code}</h1>
-            <p className="text-lg md:text-xl font-extrabold leading-none text-foreground mt-0.5">{courseTitle}</p>
+            <p className="text-lg md:text-xl font-extrabold leading-none text-foreground mt-0.5 line-clamp-1">{courseTitle}</p>
           </div>
         </div>
         <div className="flex items-center gap-3">
-          <span className={`px-3 py-1 text-xs font-black tracking-wider uppercase rounded-md ${mode === 'tutor' ? 'bg-blue-500/10 text-blue-600' : 'bg-red-500/10 text-red-600'}`}>
+          <span className={`px-3 py-1 text-xs font-black tracking-wider uppercase rounded-md hidden md:block ${mode === 'tutor' ? 'bg-blue-500/10 text-blue-600' : 'bg-red-500/10 text-red-600'}`}>
             {mode === 'tutor' ? 'Tutor' : 'Exam'}
           </span>
           <button onClick={() => setTheme(theme === "dark" ? "light" : "dark")} className="p-2 rounded-md bg-muted text-foreground hover:bg-muted/80 transition-colors">
@@ -263,34 +300,82 @@ function QuizContent() {
       </div>
 
       <div className="w-full max-w-3xl flex-1 flex flex-col justify-start">
-        <h2 className="text-lg md:text-2xl font-bold mb-6 text-foreground leading-relaxed text-left">
-          <span className="text-primary mr-2">{absoluteQuestionIndex}.</span> 
-          {question.question}
-        </h2>
+        <div className="mb-6 flex flex-col md:flex-row md:items-start gap-3">
+          <span className="flex items-center justify-center bg-primary text-primary-foreground font-black text-xl rounded-md h-10 w-10 shrink-0">
+            {absoluteQuestionIndex}
+          </span>
+          <div>
+            <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-1">
+              {question.type === 'mtf' ? 'Multiple True / False' : 'Multiple Choice'}
+            </p>
+            <h2 className="text-lg md:text-2xl font-bold text-foreground leading-relaxed text-left">
+              {question.question}
+            </h2>
+          </div>
+        </div>
         
         <div className="grid grid-cols-1 gap-3">
-          {question.options.map((option: string) => (
+          
+          {/* --- RENDER MCQ --- */}
+          {(!question.type || question.type === "mcq") && question.options.map((option: string) => (
             <button 
               key={option} 
-              onClick={() => handleOptionSelect(option)} 
+              onClick={() => handleMcqSelect(option)} 
               disabled={hasChecked} 
               className={`p-4 rounded-lg border text-left font-medium text-base transition-all flex justify-between items-center 
                 ${!hasChecked 
-                  ? (selectedOption === option ? "border-primary bg-primary/5 text-primary ring-1 ring-primary" : "border-border bg-card hover:bg-muted text-foreground") 
-                  : (option === question.correct ? "border-green-500 bg-green-500/10 text-green-600" : selectedOption === option ? "border-red-500 bg-red-500/10 text-red-600" : "border-border bg-card text-muted-foreground opacity-50 cursor-not-allowed")}`}
+                  ? (selectedAnswer === option ? "border-primary bg-primary/5 text-primary ring-1 ring-primary" : "border-border bg-card hover:bg-muted text-foreground") 
+                  : (option === question.correct ? "border-green-500 bg-green-500/10 text-green-600" : selectedAnswer === option ? "border-red-500 bg-red-500/10 text-red-600" : "border-border bg-card text-muted-foreground opacity-50 cursor-not-allowed")}`}
             >
               <span>{option}</span>
             </button>
           ))}
+
+          {/* --- RENDER MTF --- */}
+          {question.type === "mtf" && question.options.map((statement: string, idx: number) => {
+            const userPick = selectedAnswer ? selectedAnswer[idx] : null; 
+            const correctPick = question.correct[idx];
+
+            let rowStyle = "border-border bg-card text-foreground hover:border-primary/30";
+            if (hasChecked) {
+              if (userPick === correctPick) rowStyle = "border-green-500 bg-green-500/10 text-green-600";
+              else if (userPick) rowStyle = "border-red-500 bg-red-500/10 text-red-600";
+              else rowStyle = "border-border bg-card text-muted-foreground opacity-50";
+            }
+
+            return (
+              <div key={idx} className={`p-4 rounded-lg border flex flex-col md:flex-row md:items-center justify-between gap-4 transition-all ${rowStyle}`}>
+                <span className="font-medium text-sm md:text-base flex-1 pr-4">{String.fromCharCode(65 + idx)}. {statement}</span>
+                
+                <div className="flex items-center gap-2 shrink-0 bg-background/50 p-1 rounded-lg border border-border">
+                  <button 
+                    onClick={() => handleMtfSelect(idx, "T")}
+                    disabled={hasChecked}
+                    className={`px-4 py-2 rounded-md font-bold text-sm transition-all border 
+                      ${userPick === "T" ? "bg-primary text-primary-foreground border-primary shadow-sm" : "bg-transparent border-transparent hover:bg-muted"}`}
+                  >
+                    True
+                  </button>
+                  <button 
+                    onClick={() => handleMtfSelect(idx, "F")}
+                    disabled={hasChecked}
+                    className={`px-4 py-2 rounded-md font-bold text-sm transition-all border 
+                      ${userPick === "F" ? "bg-primary text-primary-foreground border-primary shadow-sm" : "bg-transparent border-transparent hover:bg-muted"}`}
+                  >
+                    False
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+
         </div>
 
         {/* --- CHECK BUTTON (TUTOR MODE) --- */}
         {mode === "tutor" && !hasChecked && (
           <button 
             onClick={checkAnswer} 
-            disabled={!selectedOption} 
-            className={`mt-6 w-full py-4 rounded-lg font-bold flex items-center justify-center gap-2 transition-all 
-              ${selectedOption ? "bg-primary text-primary-foreground hover:bg-primary/90" : "bg-muted text-muted-foreground cursor-not-allowed border border-border"}`}
+            className="mt-6 w-full py-4 rounded-lg font-bold flex items-center justify-center gap-2 transition-all bg-primary text-primary-foreground hover:bg-primary/90 shadow-md"
           >
             Check Answer
           </button>
@@ -299,26 +384,31 @@ function QuizContent() {
         {/* --- DYNAMIC EXPLANATION OUTPUT (INSTANT) --- */}
         {mode === "tutor" && hasChecked && (
           <div className={`mt-6 p-5 rounded-lg border transition-all animate-in fade-in slide-in-from-bottom-2
-            ${selectedOption === question.correct ? 'bg-green-500/10 border-green-500/20' : 'bg-red-500/10 border-red-500/20'}`}
+            ${(!question.type || question.type === "mcq") 
+              ? (selectedAnswer === question.correct ? 'bg-green-500/10 border-green-500/20' : 'bg-red-500/10 border-red-500/20')
+              : 'bg-muted/50 border-border'}`} // MTF just shows neutral explanation box
           >
-            <div className={`flex items-center gap-2 mb-3 font-black text-lg
-              ${selectedOption === question.correct ? 'text-green-600 dark:text-green-500' : 'text-red-600 dark:text-red-500'}`}
-            >
-              {selectedOption === question.correct ? <CheckCircle2 size={22} strokeWidth={2.5} /> : <XCircle size={22} strokeWidth={2.5} />} 
-              {selectedOption === question.correct ? "Correct!" : "Incorrect!"}
-            </div>
-            
-            {selectedOption !== question.correct && (
-              <p className="text-sm font-medium text-foreground mb-4 bg-background/50 p-3 rounded-md border border-border">
-                The right answer is: <span className="font-bold text-green-600 dark:text-green-500">{question.correct}</span>
-              </p>
+            {(!question.type || question.type === "mcq") && (
+              <>
+                <div className={`flex items-center gap-2 mb-3 font-black text-lg
+                  ${selectedAnswer === question.correct ? 'text-green-600 dark:text-green-500' : 'text-red-600 dark:text-red-500'}`}
+                >
+                  {selectedAnswer === question.correct ? <CheckCircle2 size={22} strokeWidth={2.5} /> : <XCircle size={22} strokeWidth={2.5} />} 
+                  {selectedAnswer === question.correct ? "Correct!" : "Incorrect!"}
+                </div>
+                {selectedAnswer !== question.correct && (
+                  <p className="text-sm font-medium text-foreground mb-4 bg-background/50 p-3 rounded-md border border-border">
+                    The right answer is: <span className="font-bold text-green-600 dark:text-green-500">{question.correct}</span>
+                  </p>
+                )}
+              </>
             )}
 
-            <div className="border-t border-border/50 pt-4 mt-2">
+            <div className={`${(!question.type || question.type === "mcq") ? 'border-t border-border/50 pt-4 mt-2' : ''}`}>
               <div className="flex items-center gap-2 mb-2 text-foreground font-bold text-xs uppercase tracking-wider">
-                <BookOpen size={14} className="text-primary" /> Why?
+                <BookOpen size={14} className="text-primary" /> Explanation
               </div>
-              <p className="text-sm md:text-base leading-relaxed text-foreground/90">
+              <p className="text-sm md:text-base leading-relaxed text-foreground/90 whitespace-pre-wrap">
                 {question.explanation || "No explanation provided for this question."}
               </p>
             </div>
@@ -337,13 +427,13 @@ function QuizContent() {
           </div>
           <div className="w-1/3 flex justify-end">
             {absoluteQuestionIndex === totalQuestions ? (
-              <button onClick={handleFinish} className="px-5 py-2.5 rounded-md font-bold flex items-center gap-2 bg-green-600 text-white hover:bg-green-700 transition-all">
+              <button onClick={handleFinish} className="px-5 py-2.5 rounded-md font-bold flex items-center gap-2 bg-green-600 text-white hover:bg-green-700 transition-all shadow-md">
                 <CheckCircle2 size={18} strokeWidth={2.5} /> Finish
               </button>
             ) : (
               <button 
                 onClick={handleNext} 
-                className={`px-5 py-2.5 rounded-md font-bold flex items-center gap-2 transition-all bg-foreground text-background hover:opacity-90`}
+                className={`px-5 py-2.5 rounded-md font-bold flex items-center gap-2 transition-all bg-foreground text-background hover:opacity-90 shadow-md`}
               >
                 Next <ChevronRight size={18} strokeWidth={2.5} />
               </button>
@@ -356,15 +446,24 @@ function QuizContent() {
       <div className="w-full max-w-3xl mt-12 pt-6 border-t border-border">
         <p className="text-xs font-bold text-muted-foreground mb-3 uppercase tracking-wider">Exam Progress Map</p>
         <div className="flex flex-wrap gap-2">
-          {Array.from({ length: totalQuestions }).map((_, idx) => {
-            const isAnswered = !!userAnswers[idx];
+          {flatQuestions.map((q: any, idx: number) => {
             const isCurrent = idx === absoluteQuestionIndex - 1;
+            
+            // Logic to determine if a question is fully answered
+            let isAnswered = false;
+            if (q.type === 'mtf') {
+               const answers = userAnswers[idx];
+               isAnswered = answers && Object.keys(answers).length === q.options.length;
+            } else {
+               isAnswered = !!userAnswers[idx];
+            }
+
             return (
               <button
                 key={idx}
                 onClick={() => jumpToQuestion(idx)}
                 className={`w-9 h-9 rounded-md flex items-center justify-center text-sm font-bold border transition-all cursor-pointer hover:bg-muted
-                  ${isCurrent ? "bg-primary text-primary-foreground border-primary" : isAnswered ? "bg-green-500/10 text-green-600 border-green-500/30" : "bg-card text-muted-foreground border-border"}`}
+                  ${isCurrent ? "bg-primary text-primary-foreground border-primary scale-110 shadow-md z-10" : isAnswered ? "bg-green-500/10 text-green-600 border-green-500/30" : "bg-card text-muted-foreground border-border"}`}
               >
                 {idx + 1}
               </button>
@@ -372,32 +471,6 @@ function QuizContent() {
           })}
         </div>
       </div>
-
-      {/* --- BOTTOM FOOTER NAVIGATION --- */}
-      <footer className="w-full max-w-3xl flex justify-between items-center mt-8 pt-4">
-        <div className="w-1/3 flex justify-start">
-          <button onClick={handlePrevious} disabled={absoluteQuestionIndex === 1} className={`px-5 py-2.5 rounded-md font-bold flex items-center gap-2 border border-border bg-card text-foreground transition-all hover:bg-muted ${absoluteQuestionIndex > 1 ? "" : "opacity-0 pointer-events-none"}`}>
-            <ChevronLeft size={18} strokeWidth={2.5} /> Prev
-          </button>
-        </div>
-        <div className="w-1/3 flex justify-center text-sm font-bold text-muted-foreground">
-          {absoluteQuestionIndex} / {totalQuestions}
-        </div>
-        <div className="w-1/3 flex justify-end">
-          {absoluteQuestionIndex === totalQuestions ? (
-            <button onClick={handleFinish} className="px-5 py-2.5 rounded-md font-bold flex items-center gap-2 bg-green-600 text-white hover:bg-green-700 transition-all">
-              <CheckCircle2 size={18} strokeWidth={2.5} /> Finish
-            </button>
-          ) : (
-            <button 
-              onClick={handleNext} 
-              className={`px-5 py-2.5 rounded-md font-bold flex items-center gap-2 transition-all bg-foreground text-background hover:opacity-90`}
-            >
-              Next <ChevronRight size={18} strokeWidth={2.5} />
-            </button>
-          )}
-        </div>
-      </footer>
     </main>
   );
 }
