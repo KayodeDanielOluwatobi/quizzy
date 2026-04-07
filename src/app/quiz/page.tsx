@@ -7,7 +7,7 @@ import { supabase } from "@/lib/supabase";
 import { Sun, Moon, ChevronRight, ChevronLeft, CheckCircle2, XCircle, BrainCircuit, Loader2, Timer, BookOpen, AlertTriangle } from "lucide-react";
 
 // ⚠️ MASTER EXAM SETTINGS ⚠️
-const EXAM_DURATION_MINUTES = 60; 
+const EXAM_DURATION_MINUTES = 120; 
 const TOTAL_EXAM_QUESTIONS = 1000; 
 
 function QuizContent() {
