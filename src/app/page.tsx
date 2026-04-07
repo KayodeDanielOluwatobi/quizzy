@@ -8,7 +8,8 @@ import { BrainCircuit, Play, User, BookOpen, GraduationCap, Sun, Moon } from "lu
 // 📚 ADD YOUR COURSES HERE
 const AVAILABLE_COURSES = [
   { code: "BCH 201", title: "Biochemistry" },
-  { code: "MCB 201", title: "Bacterial Growth & Measurement" },
+  { code: "GLT 000", title: "Gluteal Region" },
+  
 ];
 
 export default function HomePage() {
@@ -17,14 +18,14 @@ export default function HomePage() {
 
   const [name, setName] = useState("");
   const [mode, setMode] = useState("exam");
-  const [selectedCourse, setSelectedCourse] = useState(AVAILABLE_COURSES[0]); 
+  const [selectedCourse, setSelectedCourse] = useState(AVAILABLE_COURSES[0]);
 
   const handleStart = () => {
     if (!name.trim()) {
       alert("Comrade, please enter your name!");
       return;
     }
-    
+
     // Push Name, Mode, Course Code, and Course Title to the URL
     router.push(
       `/quiz?name=${encodeURIComponent(name)}&mode=${mode}&course=${encodeURIComponent(selectedCourse.code)}&title=${encodeURIComponent(selectedCourse.title)}`
@@ -33,7 +34,7 @@ export default function HomePage() {
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center bg-background text-foreground transition-colors duration-300 p-6 font-sans">
-      
+
       {/* Theme Toggle */}
       <div className="absolute top-6 right-6">
         <button onClick={() => setTheme(theme === "dark" ? "light" : "dark")} className="p-2 rounded-md bg-muted text-foreground hover:bg-muted/80 transition-colors">
@@ -42,7 +43,7 @@ export default function HomePage() {
       </div>
 
       <div className="w-full max-w-xl rounded-2xl bg-card border border-border p-8 md:p-10 shadow-2xl flex flex-col items-center animate-in zoom-in-95 duration-500">
-        
+
         {/* Header */}
         <div className="bg-primary/10 p-4 rounded-xl mb-6">
           <BrainCircuit size={48} className="text-primary" strokeWidth={2} />
@@ -59,7 +60,7 @@ export default function HomePage() {
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="e.g. PFIRE"
+            placeholder="e.g. Peace"
             className="w-full rounded-md border border-input bg-background px-4 py-3.5 text-foreground font-medium placeholder:text-muted-foreground placeholder:opacity-30 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-all"
           />
         </div>
@@ -112,7 +113,7 @@ export default function HomePage() {
         >
           <Play size={20} fill="currentColor" /> Enter Portal
         </button>
-        
+
       </div>
     </main>
   );
