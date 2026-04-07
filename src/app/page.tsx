@@ -8,7 +8,7 @@ import { BrainCircuit, Play, User, BookOpen, GraduationCap, Sun, Moon } from "lu
 // 📚 ADD YOUR COURSES HERE
 const AVAILABLE_COURSES = [
   { code: "BCH 201", title: "Biochemistry" },
-  { code: "GLT 000", title: "Gluteal Region" },
+  { code: "INCOURSE", title: "MCQ & MTF" },
   
 ];
 
