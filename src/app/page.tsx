@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
-import { BrainCircuit, Play, User, BookOpen, GraduationCap, Sun, Moon } from "lucide-react";
+import { BrainCircuit, Play, User, BookOpen, GraduationCap, Sun, Moon, AlertCircle } from "lucide-react";
 
 // 📚 ADD YOUR COURSES HERE
 const AVAILABLE_COURSES = [
@@ -106,6 +106,16 @@ export default function HomePage() {
             </button>
           </div>
         </div>
+
+        {/* 🚨 DYNAMIC NEGATIVE MARKING WARNING 🚨 */}
+        {selectedCourse.code.includes("INCOURSE") && (
+          <div className="w-full mb-6 p-4 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-start gap-3 animate-in fade-in slide-in-from-top-2">
+            <AlertCircle size={20} className="text-amber-600 shrink-0 mt-0.5" />
+            <p className="text-[15px] font-bold text-amber-700 leading-relaxed tracking-tight">
+              Medical Standard Warning: This course contains MTF questions with active negative marking (-0.2 per wrong choice). Accuracy is mandatory.
+            </p>
+          </div>
+        )}
 
         {/* 4. Start Button */}
         <button
