@@ -9,7 +9,7 @@ import { BrainCircuit, Play, User, BookOpen, GraduationCap, Sun, Moon } from "lu
 const AVAILABLE_COURSES = [
   { code: "BCH 201", title: "Biochemistry" },
   { code: "INCOURSE 01", title: "MCQ & MTF 01" },
-  { code: "INCOURSE 02", title: "MCQ & MTF 02" },
+  // { code: "INCOURSE 02", title: "MCQ & MTF 02" },
   
 ];
 
