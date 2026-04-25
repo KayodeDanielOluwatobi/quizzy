@@ -10,7 +10,7 @@ const AVAILABLE_COURSES = [
   { code: "BCH 201", title: "Biochemistry" },
   { code: "INCOURSE 01", title: "MCQ & MTF 01" },
   // { code: "INCOURSE 02", title: "MCQ & MTF 02" },
-  
+
 ];
 
 export default function HomePage() {
@@ -61,7 +61,7 @@ export default function HomePage() {
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="e.g. Peace"
+            placeholder="e.g. Ikuesan Hope"
             className="w-full rounded-md border border-input bg-background px-4 py-3.5 text-foreground font-medium placeholder:text-muted-foreground placeholder:opacity-30 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-all"
           />
         </div>
